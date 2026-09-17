@@ -2,7 +2,7 @@ name: C++ Conan CI
 on:
   push:
     branches:
-      -main
+      - main
   pull_request:
 jobs:
   build:
