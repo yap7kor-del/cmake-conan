@@ -7,7 +7,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    # environment: debug-logs-conan-cmake 
+    environment: debug-logs-conan-cmake 
     steps:
       - name: Checkout source
         uses: actions/checkout@v3
@@ -19,17 +19,13 @@ jobs:
       - name: Detect Conan profile
         run: |
           conan profile detect
-      
-      # - name: Add company Conan remote
-      #   run: |
-      #     conan remote add company-artifactory \
-      #       ${{ secrets.CONAN_REMOTE_URL }}
-      
-      # - name: Login to Artifactory
-      #   run: |
-      #     conan remote login company-artifactory \
-      #       ${{ secrets.CONAN_USERNAME }}\
-      #       ${{ secrets.CONAN_PASSWORD}}
+
+      - name: Verify Debug Environment
+        run: |
+          echo "=== Verification ==="
+          echo "CONAN_LOG_LEVEL is set to: $CONAN_LOG_LEVEL"
+          echo "CMAKE_LOG_LEVEL is set to: $CMAKE_LOG_LEVEL"
+          echo "====================="
 
       - name: Install dependencies
         run: |
@@ -40,10 +36,13 @@ jobs:
       
       - name: Configure CMake
         run: |
-          cmake --preset conan-release
+          # This step uses CMAKE_LOG_LEVEL=DEBUG automatically to show how packages are found
+          # here if we run cmake --preset conan-release and then cmake --build build --config Release, we will see the debug logs for package discovery
+          cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_TOOLCHAIN_FILE=build/generators/conan_toolchain.cmake 
       
+      # ✅ 4. Fixed: Only run the build command here (no redundant configure steps)
       - name: Build
         run: |
-          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
           cmake --build build --config Release --parallel $(nproc)
-      
