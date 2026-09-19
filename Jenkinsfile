@@ -46,7 +46,7 @@ pipeline {
     //   FIX: Changed singular 'trigger' to plural 'triggers'
     triggers {
         // Polls the Git repository every 15 minutes for changes [source: 15]
-        pollSCM('H/15 * * * *') 
+        pollSCM('H/1 * * * *') 
     }
 
     stages {
