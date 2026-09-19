@@ -1,9 +1,17 @@
 pipeline {
 
+
     agent {
         docker {
             image 'python:3.11-slim'
-            args '-u 0'
+            args '''-u 0
+            -e HTTP_PROXY=http://rb-proxy-de.bosch.com:8080
+            -e HTTPS_PROXY=http://rb-proxy-de.bosch.com:8080
+            -e http_proxy=http://rb-proxy-de.bosch.com:8080
+            -e https_proxy=http://rb-proxy-de.bosch.com:8080
+            -e NO_PROXY=localhost,127.0.0.1,jenkins-controller
+            -e no_proxy=localhost,127.0.0.1,jenkins-controller
+        '''
         }
     }
 
@@ -53,7 +61,20 @@ pipeline {
                 '''
             }
         }
+        stage('Network Check') {
+            steps {
+                sh '''
+                echo "DNS configuration:"
+                cat /etc/resolv.conf
 
+                echo "Proxy variables:"
+                env | grep -i proxy || true
+
+                echo "DNS lookup:"
+                getent hosts deb.debian.org || true
+            '''
+            }
+        }
         stage('Install Build Tools') {
             steps {
                 echo 'Installing GCC, CMake and Git...'
