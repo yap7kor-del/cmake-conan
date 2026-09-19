@@ -4,7 +4,7 @@ pipeline {
         docker {
             image 'python:3.11-slim' // Contains Python and Pip natively
             // FIX: Changed network name to 'jenkins-net' to match our newly created bridge network
-            args '-u 0 --network jenkins-net' 
+            args '-u 0' 
         }
     }
 
