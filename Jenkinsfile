@@ -1,76 +1,153 @@
 pipeline {
-    // 1. Run the entire pipeline inside a clean Docker compiler container
+
     agent {
         docker {
-            image 'python:3.11-slim' // Contains Python and Pip natively
-            // FIX: Changed network name to 'jenkins-net' to match our newly created bridge network
-            args '-u 0' 
+            image 'python:3.11-slim'
+            args '-u 0'
         }
     }
+
+    options {
+        timeout(time: 20, unit: 'MINUTES')
+        timestamps()
+        disableConcurrentBuilds()
+
+        buildDiscarder(
+            logRotator(
+                numToKeepStr: '10',
+                artifactNumToKeepStr: '5'
+            )
+        )
+    }
+
+    parameters {
+        choice(
+            name: 'BUILD_TYPE',
+            choices: ['Debug', 'Release'],
+            description: 'Select build type'
+        )
+
+        booleanParam(
+            name: 'DEPLOY',
+            defaultValue: false,
+            description: 'Deploy after build'
+        )
+    }
+
     stages {
-        stage('Install System Compilers') {
+
+        stage('Checkout') {
             steps {
-                echo "Installing GCC, G++, and CMake inside the container..."
+                checkout scm
+            }
+        }
+
+        stage('Debug Environment') {
+            steps {
                 sh '''
-                    apt-get update && apt-get install -y \
+                    whoami
+                    pwd
+                    ls -la
+                    cat /etc/os-release
+                    python --version
+                '''
+            }
+        }
+
+        stage('Install Build Tools') {
+            steps {
+                echo 'Installing GCC, CMake and Git...'
+
+                sh '''
+                    apt-get update
+
+                    apt-get install -y \
                         build-essential \
                         cmake \
                         git
+
+                    gcc --version
+                    cmake --version
+                    git --version
                 '''
             }
         }
 
         stage('Install Conan') {
             steps {
-                echo "Installing Conan Package Manager..."
-                sh 'pip install conan'
+                echo 'Installing Conan...'
+
+                sh '''
+                    pip install --no-cache-dir conan==2.21.0
+                    conan --version
+                '''
             }
         }
 
         stage('Detect Conan Profile') {
             steps {
-                echo "Detecting compiler profiles..."
-                sh 'conan profile detect'
+                sh '''
+                    conan profile detect --force
+                    conan profile show
+                '''
             }
         }
 
         stage('Install Dependencies') {
             steps {
-                echo "Installing packages with Conan..."
-                sh '''
+                sh """
                     conan install . \
                         --output-folder=build \
                         --build=missing \
-                        -s build_type=Release
-                '''
+                        -s build_type=${params.BUILD_TYPE}
+                """
             }
         }
 
         stage('Configure CMake') {
             steps {
-                echo "Generating build configuration using Conan presets..."
-                sh 'cmake --preset conan-release'
+                sh """
+                    cmake --preset conan-${params.BUILD_TYPE.toLowerCase()}
+                """
             }
         }
 
         stage('Build') {
             steps {
-                echo "Compiling project binaries..."
-                sh 'cmake --build build --config Release --parallel $(nproc)'
+                sh """
+                    cmake --build build \
+                        --config ${params.BUILD_TYPE} \
+                        --parallel
+                """
+            }
+        }
+
+        stage('Archive Artifacts') {
+            steps {
+                archiveArtifacts(
+                    artifacts: 'build/**/*',
+                    fingerprint: true,
+                    allowEmptyArchive: true
+                )
             }
         }
     }
 
     post {
+
         always {
-            echo "Cleaning up workspace..."
-            cleanWs() // Clear files to keep laptop storage completely clean [source: 21]
+            cleanWs(
+                deleteDirs: true,
+                notFailBuild: true
+            )
         }
+
         success {
-            echo "Build completed successfully!"
+            echo '✅ Build completed successfully.'
         }
+
         failure {
-            echo "Build failed. Please check the logs for details."
+            echo '❌ Build failed. Check console output.'
         }
     }
 }
