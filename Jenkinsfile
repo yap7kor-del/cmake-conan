@@ -7,48 +7,6 @@ pipeline {
             args '-u 0' 
         }
     }
-
-    options {
-        timeout(time: 10, unit: 'MINUTES') // Prevents hanging builds
-        timestamps() // Adds timestamps to the console logs
-        disableConcurrentBuilds() // Prevents overlapping concurrent runs
-        skipDefaultCheckout() // Overrides default checkout so we can manually manage workspace if needed
-        
-        buildDiscarder(
-            logRotator(
-                numToKeepStr: '10',  // Retain logs of only the last 10 builds
-                artifactNumToKeepStr: '5'
-            )
-        ) 
-        skipStagesAfterUnstable() // Skip downstream stages if preceding checks fail
-    }
-
-    //  FIX: Changed comments from Python '#' to Groovy '//'
-    // Define parameters for the pipeline
-    parameters {
-        string(
-            name: 'CONAN_LOG_LEVEL', 
-            defaultValue: 'debug', 
-            description: 'Set Conan log level'
-        )
-        booleanParam(
-            name: 'DEPLOY', 
-            defaultValue: false, 
-            description: 'Enable deployment after build'
-        )
-        choice(
-            name: 'BUILD_TYPE', 
-            choices: ['Debug', 'Release'], 
-            description: 'Select the build type'
-        )
-    }
-
-    //   FIX: Changed singular 'trigger' to plural 'triggers'
-    triggers {
-        // Polls the Git repository every 15 minutes for changes [source: 15]
-        pollSCM('H/1 * * * *') 
-    }
-
     stages {
         stage('Install System Compilers') {
             steps {
