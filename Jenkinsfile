@@ -1,44 +1,31 @@
 pipeline {
-    // 1. Tell Jenkins to run the entire pipeline inside a Docker compiler container
+    // 1. Run the entire pipeline inside a clean Docker compiler container
     agent {
         docker {
             image 'python:3.11-slim' // Contains Python and Pip natively
-            // Pass compiler installations to the container if needed
-            args '-u 0 --network jenkins-net' // Runs as root inside the container to allow installations
+            // FIX: Changed network name to 'jenkins-net' to match our newly created bridge network
+            args '-u 0 --network jenkins-net' 
         }
     }
 
-    // 2. Define your debug environment variables globally
-    // environment {
-    //     CONAN_LOG_LEVEL = 'debug'
-    //     CMAKE_LOG_LEVEL = 'DEBUG'
-    // }
-
     options {
-        timeout(time: 10, unit: 'MINUTES')
-        timestamps() // Adds timestamps to the console output for better traceability
+        timeout(time: 10, unit: 'MINUTES') // Prevents hanging builds
+        timestamps() // Adds timestamps to the console logs
+        disableConcurrentBuilds() // Prevents overlapping concurrent runs
+        skipDefaultCheckout() // Overrides default checkout so we can manually manage workspace if needed
         
-        // Prevents multiple builds from running simultaneously like two pipelines run sh deploy.sh 
-        disableConcurrentBuilds() 
-        
-        // Prevents Jenkins from doing the automatic checkout at the start
-        skipDefaultCheckout() 
-
         buildDiscarder(
             logRotator(
-                numToKeepStr: '10'  // Keeps only the last 10 builds to save space
+                numToKeepStr: '10',  // Retain logs of only the last 10 builds
                 artifactNumToKeepStr: '5'
             )
         ) 
-
-        skipStagesAfterUnstable() // If a stage fails or unstable, skip the remaining stages
+        skipStagesAfterUnstable() // Skip downstream stages if preceding checks fail
     }
 
-
-    # Define parameters for the pipeline
-    # common parameters types :
-    # string, booleanParam, choice, text, password
-    parameters{
+    //  FIX: Changed comments from Python '#' to Groovy '//'
+    // Define parameters for the pipeline
+    parameters {
         string(
             name: 'CONAN_LOG_LEVEL', 
             defaultValue: 'debug', 
@@ -54,18 +41,13 @@ pipeline {
             choices: ['Debug', 'Release'], 
             description: 'Select the build type'
         )
-
     }
-    trigger {
-        // Polls the Git repository every 15 minutes for changes
+
+    //   FIX: Changed singular 'trigger' to plural 'triggers'
+    triggers {
+        // Polls the Git repository every 15 minutes for changes [source: 15]
         pollSCM('H/15 * * * *') 
     }
-
-    //when is used to conditionally execute stages based on parameters or environment variables
-    // allOf{} , anyOf{} , not{} used inside when{} to combine multiple conditions
-    // when {
-    //     expression { return params.DEPLOY == true }
-    // }
 
     stages {
         stage('Install System Compilers') {
@@ -94,16 +76,6 @@ pipeline {
             }
         }
 
-        // stage('Verify Debug Environment') {
-        //     steps {
-        //         echo "=== Verification ==="
-        //         // Using Jenkins environment resolution syntax
-        //         echo "CONAN_LOG_LEVEL is set to: ${env.CONAN_LOG_LEVEL}"
-        //         echo "CMAKE_LOG_LEVEL is set to: ${env.CMAKE_LOG_LEVEL}"
-        //         echo "====================="
-        //     }
-        // }
-
         stage('Install Dependencies') {
             steps {
                 echo "Installing packages with Conan..."
@@ -126,19 +98,15 @@ pipeline {
         stage('Build') {
             steps {
                 echo "Compiling project binaries..."
-                // Under Jenkins, we use nproc to dynamically count the CPU cores on our build node
                 sh 'cmake --build build --config Release --parallel $(nproc)'
             }
         }
     }
 
-
     post {
         always {
-            // Collect test results and artifacts
-            //junit 'build/test-results/**/*.xml' // Collects JUnit test results
             echo "Cleaning up workspace..."
-            cleanWs() // Cleans the workspace after the build, regardless of success or failure
+            cleanWs() // Clear files to keep laptop storage completely clean [source: 21]
         }
         success {
             echo "Build completed successfully!"
